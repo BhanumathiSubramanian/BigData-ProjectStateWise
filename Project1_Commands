@@ -1,0 +1,56 @@
+
+grunt >> register /home/acadgild/Downloads/pig_xml.jar
+
+
+A = load '/user/flume/flume_import/StatewiseDistrictwisePhysicalProgress.xml' using pig.XML.newloader('row') as (doc:chararray);
+
+C = foreach B generate FLATTEN(REGEX_EXTRACT_ALL(doc,'<row>\\s*<State_Name>(.*)</State_Name>\\s*<District_Name>(.*)</District_Name>\\s*<Project_Objectives_IHHL_BPL>(.*)</Project_Objectives_IHHL_BPL>\\s*<Project_Objectives_IHHL_APL>(.*)</Project_Objectives_IHHL_APL>\\s*<Project_Objectives_IHHL_TOTAL>(.*)</Project_Objectives_IHHL_TOTAL>\\s*<Project_Objectives_SCW>(.*)</Project_Objectives_SCW>\\s*<Project_Objectives_School_Toilets>(.*)</Project_Objectives_School_Toilets>\\s*<Project_Objectives_Anganwadi_Toilets>(.*)</Project_Objectives_Anganwadi_Toilets>\\s*<Project_Objectives_RSM>(.*)</Project_Objectives_RSM>\\s*<Project_Objectives_PC>(.*)</Project_Objectives_PC>\\s*<Project_Performance-IHHL_BPL>(.*)</Project_Performance-IHHL_BPL>\\s*<Project_Performance-IHHL_APL>(.*)</Project_Performance-IHHL_APL>\\s*<Project_Performance-IHHL_TOTAL>(.*)</Project_Performance-IHHL_TOTAL>\\s*<Project_Performance-SCW>(.*)</Project_Performance-SCW>\\s*<Project_Performance-School_Toilets>(.*)</Project_Performance-School_Toilets>\\s*<Project_Performance-Anganwadi_Toilets>(.*)</Project_Performance-Anganwadi_Toilets>\\s*<Project_Performance-RSM>(.*)</Project_Performance-RSM>\\s*<Project_Performance-PC>(.*)</Project_Performance-PC>\\s*</row>'));
+
+STORE C INTO '/user/flume/flume_import/xmlresult' using PigStorage(',');
+
+
+
+
+Result = load '/user/flume/flume_import/xmlresult/part-m-00000' using PigStorage(',') as (statename:chararray,districtname:chararray, projobjIHHLBPL:int,projobjIHHLAPL:int,projobjIHHLTOTAL:int, projobjscw:int,projobjschooltoilet:int, projobjAnganwaditoilet:int,projobjRSM:int,projobjPC:int, projperfIHHLBPL:int,projperIHHLAPL:int,projperIHHLtotal:int, projperSCW:int,projperschoolToilet:int,
+projperAnganwadiToilet:int,projperRSM:int,projperPC:int)
+
+1. Find out the districts who achieved 100 percent objective in BPL cards. Export the results to mysql using sqoop
+
+Q1 = foreach Result generate districtname, ROUND((double)projperfIHHLBPL/ (double)projobjIHHLBPL * 100) as Achi
+Q2 = FILTER Q1 by Achi == 100
+
+ 
+STORE Q2 INTO '/user/flume/flume_import/final_proj' using PigStorage(',');
+
+sqoop export --connect jdbc:mysql://localhost/demodb --table Proj1 --export-dir /user/flume/flume_import/final_proj/part-m-00000 --fields-terminated-by ',' --username root --password pass@123
+
+
+2. Write a Pig UDF to filter the districts who have reached 80% of objectives of BPL cards.
+Export the results to mysql using sqoop.
+
+Pig Commands:
+
+register /home/acadgild/Project-Main/Project1-StateWise/fPercentage.jar
+
+
+A = load '/user/flume/flume_import/xmlresult/part-m-00000' using PigStorage(',') as (statename:chararray,districtname:chararray, projobjIHHLBPL:int,projobjIHHLAPL:int,projobjIHHLTOTAL:int, projobjscw:int,projobjschooltoilet:int, projobjAnganwaditoilet:int,projobjRSM:int,projobjPC:int, projperfIHHLBPL:int,projperIHHLAPL:int,projperIHHLtotal:int, projperSCW:int,projperschoolToilet:int,
+projperAnganwadiToilet:int,projperRSM:int,projperPC:int)
+
+
+B = FOREACH A GENERATE projobjIHHLBPL,projperfIHHLBPL 
+  
+Result = FILTER B by findPercentage.PerformancePercentage(projperfIHHLBPL,projobjIHHLBPL);
+
+SStore = STORE Result into '/user/flume/flume_import/StateUDF' using PigStorage(',');
+
+Table in mySQL
+Create table projState (projobjIHHLBPL int,projperfIHHLBPL int);
+
+Using SQOOP
+
+sqoop export --connect jdbc:mysql://localhost/demodb --table projState --export-dir /user/flume/flume_import/StateUDF/part-m-00000 --fields-terminated-by ',' --username root --password pass@123
+
+
+
+
+
